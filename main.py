@@ -1116,8 +1116,8 @@ class MenusWidget(QWidget):
         jour_semaine = date.dayOfWeek()
 
         # ======================================================
-# DIMANCHE : PRIORITÉ À L'AFFICHAGE DU SAMEDI
-# ======================================================
+        # DIMANCHE : PRIORITÉ À L'AFFICHAGE DU SAMEDI
+        # ======================================================
 
         if jour_semaine == 7:
             samedi = date.addDays(-1)
@@ -1128,42 +1128,6 @@ class MenusWidget(QWidget):
                 "ecole": False,
                 "citoyen": True,
                 "jour_reference": samedi.toString("yyyy-MM-dd"),
-            }
-
-        # ======================================================
-        # CAS SPÉCIAUX : 25 DÉCEMBRE
-        # ======================================================
-
-        if date.month() == 12 and date.day() == 25:
-
-            veille = date.addDays(-1)
-
-            return {
-                "type": "NOEL",
-                "libelle": "Repas du 24 décembre au choix",
-                "ecole": False,
-                "citoyen": True,
-                "jour_reference": veille.toString(
-                    "yyyy-MM-dd"
-                ),
-            }
-
-        # ======================================================
-        # CAS SPÉCIAUX : 1er JANVIER
-        # ======================================================
-
-        if date.month() == 1 and date.day() == 1:
-
-            veille = date.addDays(-1)
-
-            return {
-                "type": "NOUVEL_AN",
-                "libelle": "Repas du 31 décembre au choix",
-                "ecole": False,
-                "citoyen": True,
-                "jour_reference": veille.toString(
-                    "yyyy-MM-dd"
-                ),
             }
 
         # ======================================================
@@ -1190,20 +1154,6 @@ class MenusWidget(QWidget):
         periode = cursor.fetchone()
 
         conn.close()
-
-        # ======================================================
-        # JOUR FÉRIÉ
-        # ======================================================
-
-        if periode and periode[0] == "FERIE":
-
-            return {
-                "type": "FERIE",
-                "libelle": periode[1],
-                "ecole": False,
-                "citoyen": True,
-                "jour_reference": None,
-            }
 
         # ======================================================
         # CONGÉ SCOLAIRE
@@ -1234,24 +1184,6 @@ class MenusWidget(QWidget):
             }
 
         # ======================================================
-        # DIMANCHE NORMAL
-        # ======================================================
-
-        if jour_semaine == 7:
-
-            samedi = date.addDays(-1)
-
-            return {
-                "type": "DIMANCHE",
-                "libelle": "Plat du samedi au choix",
-                "ecole": False,
-                "citoyen": True,
-                "jour_reference": samedi.toString(
-                    "yyyy-MM-dd"
-                ),
-            }
-
-        # ======================================================
         # JOUR NORMAL
         # ======================================================
 
@@ -1269,86 +1201,6 @@ class MenusWidget(QWidget):
             "citoyen": True,
             "jour_reference": None,
         }
-
-    def date_reference_citoyen(self, date):
-
-        date_sql = date.toString("yyyy-MM-dd")
-
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT type
-            FROM calendrier_fermetures
-            WHERE date_debut <= ?
-            AND date_fin >= ?
-            LIMIT 1
-            """,
-            (
-                date_sql,
-                date_sql
-            )
-        )
-
-        periode = cursor.fetchone()
-
-        conn.close()
-
-        # ======================================================
-        # NOËL
-        # ======================================================
-
-        if date.month() == 12 and date.day() == 25:
-            return date.addDays(-1)
-
-        # ======================================================
-        # NOUVEL AN
-        # ======================================================
-
-        if date.month() == 1 and date.day() == 1:
-            return date.addDays(-1)
-
-        # ======================================================
-        # JOUR FÉRIÉ
-        # ======================================================
-        # Pour un citoyen, le jour férié reprend
-        # systématiquement le menu de la veille.
-
-        if periode and periode[0] == "FERIE":
-
-            return date.addDays(-1)
-
-    def menu_reference(self, date):
-
-        date_reference = self.date_reference_citoyen(date)
-
-        if date_reference is None:
-            return None
-
-        date_sql = date_reference.toString("yyyy-MM-dd")
-
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT
-                potage_id,
-                plat_a_id,
-                plat_b_id,
-                dessert_id
-            FROM menus
-            WHERE date_menu = ?
-            """,
-            (date_sql,)
-        )
-
-        menu = cursor.fetchone()
-
-        conn.close()
-
-        return menu
 
     # ==========================================================
     # CHARGER LE MOIS
@@ -1390,10 +1242,7 @@ class MenusWidget(QWidget):
 
             texte_jour = nom_jour
 
-            if infos["type"] == "FERIE":
-                texte_jour += f" - {infos['libelle']}"
-
-            elif infos["type"] == "CONGE":
+            if infos["type"] == "CONGE":
                 texte_jour += f" - {infos['libelle']}"
 
             elif infos["type"] == "FERMETURE":
@@ -1478,71 +1327,11 @@ class MenusWidget(QWidget):
 
                 plat_b.lineEdit().setPlaceholderText("Plat du samedi au choix")
 
-            # ======================================================
-            # JOURNÉE CITOYEN DÉRIVÉE
-            # ======================================================
-
-            date_reference = self.date_reference_citoyen(date)
-
-            if date_reference is not None:
-                menu_reference = self.menu_reference(date)
-
-                if menu_reference is not None:
-
-                    valeurs_reference = [
-                        menu_reference[0],  # potage
-                        menu_reference[1],  # plat A
-                        menu_reference[2],  # plat B
-                        menu_reference[3],  # dessert
-                    ]
-
-                    colonnes = [
-                        2,  # potage
-                        3,  # plat A
-                        4,  # plat B
-                        6,  # dessert
-                    ]
-
-                    for colonne, valeur in zip(colonnes, valeurs_reference):
-
-                        combo = self.table.cellWidget(jour - 1, colonne)
-
-                        if combo is not None:
-
-                            index = combo.findData(valeur)
-
-                            if index >= 0:
-
-                                combo.setCurrentIndex(index)
-
-                            combo.setEnabled(False)
-
-                            combo.setStyleSheet(
-                                """
-                                QComboBox {
-                                    background-color: #e0e0e0;
-                                    color: #777777;
-                                }
-
-                                QComboBox::drop-down {
-                                    background-color: #d0d0d0;
-                                }
-                                """
-                            )
-
-                            combo.setToolTip("Menu repris de la journée précédente")
-          
         # ======================================================
         # Recharger les menus enregistrés
         # ======================================================
 
         self.charger_menus_existants()
-
-        # ======================================================
-        # Charger les menus références
-        # ======================================================
-        self.charger_menus_references()
-
 
     # ==========================================================
     # CHARGER LES MENUS EXISTANTS
@@ -1629,59 +1418,6 @@ class MenusWidget(QWidget):
 
                         combo.setCurrentIndex(index)
 
-    # ==========================================================
-    # CHARGER LES MENUS REFERENCES
-    # ==========================================================
-    def charger_menus_references(self):
-
-        for ligne in range(self.table.rowCount()):
-
-            item_date = self.table.item(ligne, 0)
-
-            if item_date is None:
-                continue
-
-            date_sql = item_date.data(Qt.ItemDataRole.UserRole)
-
-            date = QDate.fromString(date_sql, "yyyy-MM-dd")
-
-            # Seulement dimanche pour l'instant
-            if date.dayOfWeek() != 7:
-                continue
-
-            menu = self.menu_reference(date)
-
-            if menu is None:
-                continue
-
-            potage_id = menu[0]
-            plat_a_id = menu[1]
-            plat_b_id = menu[2]
-            dessert_id = menu[3]
-
-            # Potage
-            potage = self.table.cellWidget(ligne, 2)
-
-            if potage is not None:
-
-                index = potage.findData(potage_id)
-
-                if index >= 0:
-                    potage.setCurrentIndex(index)
-
-            # Dessert
-            dessert = self.table.cellWidget(ligne, 6)
-
-            if dessert is not None:
-                index = dessert.findData(dessert_id)
-
-                if index >= 0:
-                    dessert.setCurrentIndex(index)
-
-    # ==========================================================
-    # ENREGISTRER LE MOIS
-    # ==========================================================
-
     def enregistrer_mois(self):
 
         conn = get_connection()
@@ -1704,22 +1440,6 @@ class MenusWidget(QWidget):
             # Il utilise le menu du samedi.
 
             if infos["type"] == "DIMANCHE":
-                continue
-
-            # ======================================================
-            # JOUR FÉRIÉ
-            # ======================================================
-            # Le jour férié utilise le menu de la veille.
-            # Il ne crée donc pas son propre menu.
-
-            if infos["type"] == "FERIE":
-                continue
-
-            # ======================================================
-            # NOËL / NOUVEL AN
-            # ======================================================
-
-            if infos["type"] in ("NOEL", "NOUVEL_AN"):
                 continue
 
             combos = []
